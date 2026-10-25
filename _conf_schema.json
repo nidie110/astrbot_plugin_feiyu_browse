@@ -1,0 +1,61 @@
+{
+  "_sec_bsk": {
+    "description": "=== 浏览器（bsk） ===",
+    "type": "text",
+    "invisible": true
+  },
+  "bsk_path": {
+    "description": "bsk.exe 路径",
+    "type": "string",
+    "default": "",
+    "hint": "browser-skill 的命令行程序。填绝对路径，例如 C:\\Users\\你\\.local\\bin\\bsk.exe；留空则用 PATH 里的 bsk。"
+  },
+  "browser": {
+    "description": "浏览器实例 id",
+    "type": "string",
+    "default": "",
+    "hint": "留空自动用第一个在线实例；想固定到某个已登录的浏览器再填。"
+  },
+  "timeout": {
+    "description": "单次操作超时（秒）",
+    "type": "int",
+    "default": 120,
+    "slider": {
+      "min": 10,
+      "max": 600,
+      "step": 10
+    }
+  },
+  "_sec_limit": {
+    "description": "=== 内容 ===",
+    "type": "text",
+    "invisible": true
+  },
+  "max_chars": {
+    "description": "返回正文最大字数",
+    "type": "int",
+    "default": 3000,
+    "slider": {
+      "min": 500,
+      "max": 20000,
+      "step": 500
+    },
+    "hint": "太长会挤占模型上下文，一般 3000 够用。"
+  },
+  "_sec_search": {
+    "description": "=== 联网搜索（可选） ===",
+    "type": "text",
+    "invisible": true
+  },
+  "search_key": {
+    "description": "搜索接口 API Key",
+    "type": "string",
+    "default": "",
+    "hint": "留空则不启用 web_search 工具（只读网页、截图仍然可用）。"
+  },
+  "search_api": {
+    "description": "搜索接口地址",
+    "type": "string",
+    "default": "https://api.deepseek.com/v1/tools/search"
+  }
+}

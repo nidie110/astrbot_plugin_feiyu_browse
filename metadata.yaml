@@ -1,0 +1,13 @@
+name: astrbot_plugin_feiyu_browse
+display_name: "大肥鱼·看网页"
+desc: "只读浏览器：用真实登录态打开网页读正文、截图；不点击、不填表、不碰用户标签页"
+help: "说「看看这个网页 <链接>」或「这个网页截图 <链接>」；指令 /看网页、/网页截图"
+version: 1.1.0
+author: "部署助手"
+repo: ""
+astrbot_version: ">=4.11.0"
+tags:
+  - 浏览器
+  - 网页读取
+  - 截图
+  - 搜索
