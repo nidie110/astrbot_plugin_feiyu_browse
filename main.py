@@ -8,6 +8,12 @@ import time
 import uuid
 from pathlib import Path
 
+import sys as _sys
+
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+_sys.modules.pop("_feiyu_kit", None)  # 顶层模块名，重载插件时先清缓存再导，避免用到旧字节
+import _feiyu_kit as kit  # noqa: E402
+
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
@@ -138,24 +144,17 @@ class FeiyuBrowse(Star):
     _CACHE_TTL = 600
 
     def _search_api(self, query: str, count: int = 5, need_content: bool = True):
-        import urllib.request
-
         key = str(self.cfg.get("search_key") or "").strip()
-        api = str(self.cfg.get("search_api") or "https://api.deepseek.com/v1/tools/search")
         if not key:
             raise RuntimeError("插件配置里没填 search_key")
-        payload = json.dumps(
-            {"query": query[:120], "count": count, "need_content": need_content}
-        ).encode("utf-8")
-        req = urllib.request.Request(
-            api,
-            data=payload,
-            headers={"Content-Type": "application/json", "Authorization": "Bearer " + key},
-        )
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(req, timeout=30) as r:
-            data = json.loads(r.read())
-        return [x for x in (data.get("results") or []) if isinstance(x, dict)]
+        hits = kit.deepseek_search(query[:120], count=count, need_content=need_content,
+                                 key=key, api=str(self.cfg.get("search_api") or ""))
+        # 保持和历史字段一致，下游 _format_hits 不用改
+        return [{
+            "title": h.get("title", ""), "url": h.get("url", ""),
+            "site_name": h.get("site", ""), "date": h.get("date", ""),
+            "summary": h.get("summary", ""), "content": h.get("summary", ""),
+        } for h in hits]
 
     def _format_hits(self, hits, limit: int = 1600) -> str:
         lines = []

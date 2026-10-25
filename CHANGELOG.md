@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1 (2026-10-25)
+
+- 搜索接口改用 _feiyu_kit.deepseek_search。
+- 新增 `_feiyu_kit.py`（vendor 方式共用，`sync_kit.py` 同步），功能与配置键不变。
+
 ## 1.2.0 — 2026-10-25
 
 - `web_search` 结果里带上**链接、来源站、发布时间**，AI 可以顺着链接再用 `read_webpage` 读全文
@@ -23,3 +28,8 @@
 
 ### 1.0.0
 - 内部自用版本，无对外文档。
+
+## 1.2.2 (2026-10-25)
+
+- 搜索走 kit 新版：支持配置里的 search_api、过滤非 dict 结果、超时回到 30s。
+- 插件侧 import 前清 `sys.modules['_feiyu_kit']` 缓存，改用新 kit 不必整进程重启也能生效（稳妥起见仍建议重启）。
