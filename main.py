@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -130,43 +131,100 @@ class FeiyuBrowse(Star):
 
     # ---------- LLM 工具 ----------
 
-    @filter.llm_tool(name="web_search")
-    async def web_search(self, event: AstrMessageEvent, query: str):
-        """联网搜索。当用户问"这是谁/哪里/什么时候/多少钱"这类需要最新信息的问题，或让你查一个人的资料时使用。
+    # ---------- 联网搜索 ----------
+    # 结果以「标题（来源 · 日期） + 链接 + 摘要」给出，AI 看完可以再用 read_webpage 打开最相关的那条。
 
-        Args:
-            query(string): 搜索关键词，尽量具体
-        """
+    _SEARCH_CACHE: dict = {}
+    _CACHE_TTL = 600
+
+    def _search_api(self, query: str, count: int = 5, need_content: bool = True):
         import urllib.request
 
-        key = self.cfg.get("search_key", "")
-        api = self.cfg.get("search_api", "https://api.deepseek.com/v1/tools/search")
-        q = (query or "").strip()
+        key = str(self.cfg.get("search_key") or "").strip()
+        api = str(self.cfg.get("search_api") or "https://api.deepseek.com/v1/tools/search")
+        if not key:
+            raise RuntimeError("插件配置里没填 search_key")
+        payload = json.dumps(
+            {"query": query[:120], "count": count, "need_content": need_content}
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            api,
+            data=payload,
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + key},
+        )
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=30) as r:
+            data = json.loads(r.read())
+        return [x for x in (data.get("results") or []) if isinstance(x, dict)]
+
+    def _format_hits(self, hits, limit: int = 1600) -> str:
+        lines = []
+        for i, h in enumerate(hits, 1):
+            title = re.sub(r"\s+", " ", str(h.get("title") or "")).strip()
+            url = str(h.get("url") or "").strip()
+            if len(url) > 140:  # 带一堆追踪参数的链接看着累, 只留主干
+                url = url.split("?", 1)[0]
+            site = str(h.get("site_name") or "").strip()
+            day = str(h.get("date") or "").strip()[:10]
+            body = str(h.get("summary") or h.get("content") or h.get("snippet") or "")
+            body = re.sub(r"<!\[CDATA\[|\]\]>", "", body)
+            body = re.sub(r"(?m)^\s*#{1,6}\s*", "", body)
+            body = re.sub(r"<[^>]+>", " ", body)
+            body = re.sub(r"\s+", " ", body).strip()
+            body = re.sub(r"^(\.\.\.|…|\[?CDATA)\s*", "", body)
+            body = re.sub(r"(\.\.\.|…)+", "…", body).strip(" .·…")
+            body = body[:140]
+            meta = " · ".join(x for x in (site, day) if x)
+            lines.append(f"{i}. {title}" + (f"（{meta}）" if meta else ""))
+            if url:
+                lines.append(f"   {url}")
+            if body:
+                lines.append(f"   {body}")
+        return "\n".join(lines)[:limit]
+
+    @filter.llm_tool(name="web_search")
+    async def web_search(self, event: AstrMessageEvent, query: str, count: int = 5):
+        """联网搜索. 遇到不知道的、需要最新消息的、或者要查人查事的, 先用它搜.
+        会返回每条结果的标题、来源、发布时间、链接和摘要; 想细看某条就用 read_webpage 打开它的链接.
+
+        Args:
+            query(string): 搜索关键词, 说具体点
+            count(number): 要几条, 1-8, 默认 5
+        """
+        q = str(query or "").strip()
         if not q:
-            yield event.plain_result("搜什么？")
+            yield event.plain_result("搜什么呀?")
             return
         try:
-            payload = json.dumps({"query": q[:120], "count": 5, "need_content": True}).encode()
-            req = urllib.request.Request(api, data=payload, headers={
-                "Content-Type": "application/json",
-                "Authorization": "Bearer " + key,
-            })
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            data = json.loads(await asyncio.to_thread(lambda: opener.open(req, timeout=30).read()))
-            lines = []
-            for r in (data.get("results") or [])[:5]:
-                t = (r.get("title") or "").strip()
-                sm = (r.get("summary") or r.get("content") or "").strip().replace("\n", " ")
-                if t or sm:
-                    lines.append(f"- {t}：{sm[:120]}")
-        except Exception as e:
-            logger.warning(f"[feiyu_browse] 搜索失败: {e}")
-            lines = []
+            n = max(1, min(8, int(count or 5)))
+        except Exception:
+            n = 5
 
-        if not lines:
-            yield event.plain_result("没搜到，换个关键词试试")
+        ck = f"{n}|{q}"
+        hit = self._SEARCH_CACHE.get(ck)
+        if hit and time.time() - hit[0] < self._CACHE_TTL:
+            yield event.plain_result(hit[1])
             return
-        yield event.plain_result("搜到这些：\n" + "\n".join(lines)[:900])
+
+        hits = []
+        for attempt in (1, 2):
+            try:
+                hits = await asyncio.to_thread(self._search_api, q, n, True)
+                break
+            except Exception as e:
+                logger.warning(f"[feiyu_browse] 搜索接口第 {attempt} 次失败: {e}")
+                if attempt == 1:
+                    await asyncio.sleep(1.5)
+
+        if not hits:
+            yield event.plain_result("这会儿搜不动(接口没响应), 过一会儿再试, 或者直接把链接发我我去读")
+            return
+
+        text = "搜到这些:\n" + self._format_hits(hits)
+        self._SEARCH_CACHE[ck] = (time.time(), text)
+        if len(self._SEARCH_CACHE) > 80:
+            self._SEARCH_CACHE.clear()
+        yield event.plain_result(text)
 
     @filter.llm_tool(name="read_webpage")
     async def read_webpage(self, event: AstrMessageEvent, url: str):
