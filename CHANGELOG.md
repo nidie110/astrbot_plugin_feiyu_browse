@@ -1,5 +1,18 @@
 # Changelog
 
+
+## 1.2.4 — 2026-10-25
+
+- 工具收进统一入口 `feiyu(action)`（搜 / 读网页 / 截图）；原来五个 `@filter.llm_tool` 撤下，只留管理员调试用的 `page_do`。读网页改为优先取 `document.body.innerText`，读不到才退回无障碍树。
+
+
+## 1.2.3 — 2026-10-25
+
+- 工具不再直接往聊天里塞结果：web_search / read_webpage / browse_open / browse_act 现在把内容交回你，由你自己说，不再出现「一坨搜索结果」直接发到群里的情况。
+- screenshot_webpage 改成「发图 + 交回一句话」，你知道图发出去了，不用再猜。
+- 修复 search_api 配置不生效（kit 收 api 参数），搜索接口地址可以自定义了。
+- 链接后面紧贴着写的中文（「…&vd_source=xxx给你看看这个」）不再被算进 URL。
+
 ## 1.2.1 (2026-10-25)
 
 - 搜索接口改用 _feiyu_kit.deepseek_search。

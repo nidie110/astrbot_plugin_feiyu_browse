@@ -1,4 +1,10 @@
 {
+  "owner_ids": {
+    "type": "string",
+    "description": "谁的点头才算数（管理员）",
+    "hint": "填 QQ 号，多个用逗号隔开，例如 3388708615。留空 = 只认 AstrBot 全局管理员（admins_id）。注意：QQ 私聊里框架的 is_admin() 恒为 False（它只认群管理员角色），想让自己在私聊里也能读白名单外的网页，就把自己的号填进来。",
+    "default": ""
+  },
   "_sec_bsk": {
     "description": "=== 浏览器（bsk） ===",
     "type": "text",
